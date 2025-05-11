@@ -18,7 +18,7 @@ function AdminDashboard() {
 
     // New State for Resources
     const [resources, setResources] = useState([]);
-    const [newResource, setNewResource] = useState({ name: '', type: '', cost_per_unit: '' });
+    const [newResource, setNewResource] = useState({ type: '', project_id: '', amount: '' }); // Updated state
     const [isResourcesLoading, setIsResourcesLoading] = useState(false);
     const [resourcesError, setResourcesError] = useState(null);
 
@@ -277,22 +277,27 @@ function AdminDashboard() {
 
     const handleAddResource = async (e) => {
         e.preventDefault();
-        if (!newResource.name || !newResource.type) {
-            alert('Resource Name and Type are required.');
+        if (!newResource.type || !newResource.amount) {
+            alert('Resource Type and Amount are required.');
+            return;
+        }
+        if (isNaN(parseFloat(newResource.amount)) || !isFinite(newResource.amount) || newResource.amount < 0) {
+            alert('Invalid amount.');
             return;
         }
         // Add loading/error state if needed
         try {
+            console.log('Adding resource:', newResource); // Debugging line
             const response = await fetch('http://localhost:3000/resources', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(newResource),
+                body: JSON.stringify(newResource), // newResource now includes type, project_id, amount
             });
             if (!response.ok) {
                 const errorData = await response.text();
                 throw new Error(`Failed to add resource: ${errorData}`);
             }
-            setNewResource({ name: '', type: '', cost_per_unit: '' }); // Reset form
+            setNewResource({ type: '', project_id: '', amount: '' }); // Reset form
             fetchResources(); // Refetch
             alert('Resource added successfully!');
         } catch (err) {
@@ -523,17 +528,24 @@ function AdminDashboard() {
                     {resourcesError && <p className={styles.errorMessage}>{resourcesError}</p>}
                     <form onSubmit={handleAddResource} className={styles.form}>
                         <div className={styles.formGroup}>
-                            <label className={styles.label}>Resource Name:</label>
-                            <input type="text" name="name" value={newResource.name} onChange={handleResourceInputChange} required className={styles.input} />
-                        </div>
-                        <div className={styles.formGroup}>
                             <label className={styles.label}>Type:</label>
                             {/* Consider making this a dropdown (e.g., People, Equipment, Software) */}
                             <input type="text" name="type" value={newResource.type} onChange={handleResourceInputChange} required className={styles.input} />
                         </div>
                         <div className={styles.formGroup}>
-                            <label className={styles.label}>Cost Per Unit (Optional):</label>
-                            <input type="number" step="0.01" name="cost_per_unit" value={newResource.cost_per_unit} onChange={handleResourceInputChange} className={styles.input} />
+                            <label className={styles.label}>Project:</label>
+                            <select name="project_id" value={newResource.project_id} onChange={handleResourceInputChange} className={styles.select}>
+                                <option value="">Select Project (Optional)</option>
+                                {projects.map(project => (
+                                    <option key={project.project_id} value={project.project_id}>
+                                        {project.name} (Client: {project.client_name || 'N/A'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className={styles.formGroup}>
+                            <label className={styles.label}>Amount ($):</label>
+                            <input type="number" step="0.01" name="amount" value={newResource.amount} onChange={handleResourceInputChange} required className={styles.input} />
                         </div>
                         <button type="submit" className={styles.button} disabled={isResourcesLoading}>
                             {isResourcesLoading ? 'Adding...' : 'Add Resource'}
@@ -548,18 +560,18 @@ function AdminDashboard() {
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>Name</th>
                                     <th>Type</th>
-                                    <th>Cost/Unit</th>
+                                    <th>Project</th>
+                                    <th>Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {resources.map((res) => (
                                     <tr key={res.resource_id}>
                                         <td>{res.resource_id}</td>
-                                        <td>{res.name}</td>
                                         <td>{res.type}</td>
-                                        <td>{res.cost_per_unit !== null ? `$${Number(res.cost_per_unit).toFixed(2)}` : 'N/A'}</td>
+                                        <td>{res.project_name || 'N/A'}</td>
+                                        <td>{res.amount !== null ? `$${Number(res.amount).toFixed(2)}` : 'N/A'}</td>
                                     </tr>
                                 ))}
                             </tbody>

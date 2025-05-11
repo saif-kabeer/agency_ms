@@ -143,7 +143,13 @@ app.post('/staff', (req, res) => {
 
 // GET route to fetch all resources
 app.get('/resources', (req, res) => {
-    const sql = 'SELECT * FROM resources';
+    const sql = `
+        SELECT r.resource_id, r.type, r.amount, r.project_id,
+               p.name as project_name
+        FROM resources r
+        LEFT JOIN projects p ON r.project_id = p.project_id
+        ORDER BY r.resource_id DESC
+    `;
     db.query(sql, (err, result) => {
         if (err) {
             console.error('Error fetching resources:', err);
@@ -156,18 +162,25 @@ app.get('/resources', (req, res) => {
 
 // POST route to create a new resource
 app.post('/resources', (req, res) => {
-    const { name, type, cost_per_unit } = req.body;
+    const { type, project_id, amount } = req.body;
 
-    if (!name || !type) {
-        return res.status(400).send('Resource name and type are required.');
+    if (!type || amount === undefined || amount === null) {
+        return res.status(400).send('Resource type and amount are required.');
+    }
+    if (isNaN(parseFloat(amount)) || !isFinite(amount) || amount < 0) {
+        return res.status(400).send('Invalid amount.');
     }
 
-    const sql = 'INSERT INTO resources (name, type, cost_per_unit) VALUES (?, ?, ?)';
-    const values = [name, type, cost_per_unit || null]; // Handle optional cost
+
+    const sql = 'INSERT INTO resources (type, project_id, amount) VALUES (?, ?, ?)';
+    const values = [type, project_id || null, amount]; // Handle optional project_id
 
     db.query(sql, values, (err, result) => {
         if (err) {
             console.error('Error adding resource:', err);
+            if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+                return res.status(400).send('Invalid project_id provided.');
+            }
             res.status(500).send('Error adding resource');
         } else {
             res.status(201).json({ message: 'Resource added successfully', resourceId: result.insertId });
