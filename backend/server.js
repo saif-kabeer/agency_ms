@@ -18,6 +18,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/clients', (req, res) => {
+    // SQL: SELECT * FROM clients;
     const sql = 'SELECT * FROM clients';
     db.query(sql, (err, result) => {
         if (err) {
@@ -38,6 +39,7 @@ app.post('/clients', (req, res) => {
         return res.status(400).send('Client name is required.');
     }
 
+    // SQL: INSERT INTO clients (name, contact_info, contract_details) VALUES (?, ?, ?);
     const sql = 'INSERT INTO clients (name, contact_info, contract_details) VALUES (?, ?, ?)';
     const values = [name, contact_info || null, contract_details || null]; // Use null for optional fields if empty
 
@@ -54,6 +56,7 @@ app.post('/clients', (req, res) => {
 
 // GET route to fetch projects
 app.get('/projects', (req, res) => {
+    // SQL: SELECT p.project_id, p.name, p.start_date, p.end_date, p.status, c.name as client_name FROM projects p LEFT JOIN clients c ON p.client_id = c.client_id;
     const sql = 'SELECT p.project_id, p.name, p.start_date, p.end_date, p.status, c.name as client_name FROM projects p LEFT JOIN clients c ON p.client_id = c.client_id';
     db.query(sql, (err, result) => {
         if (err) {
@@ -75,6 +78,7 @@ app.post('/projects', (req, res) => {
     }
     // Optional: Validate status enum if needed
 
+    // SQL: INSERT INTO projects (client_id, name, start_date, end_date, status) VALUES (?, ?, ?, ?, ?);
     const sql = 'INSERT INTO projects (client_id, name, start_date, end_date, status) VALUES (?, ?, ?, ?, ?)';
     // Ensure dates are null if not provided or empty
     const values = [
@@ -101,6 +105,7 @@ app.post('/projects', (req, res) => {
 
 // Add GET route to fetch staff
 app.get('/staff', (req, res) => {
+    // SQL: SELECT * FROM staff;
     const sql = 'SELECT * FROM staff';
     db.query(sql, (err, result) => {
         if (err) {
@@ -122,6 +127,7 @@ app.post('/staff', (req, res) => {
     }
     // Optional: Validate email format
 
+    // SQL: INSERT INTO staff (name, email, role) VALUES (?, ?, ?);
     const sql = 'INSERT INTO staff (name, email, role) VALUES (?, ?, ?)';
     const values = [name, email || null, role || null];
 
@@ -143,6 +149,7 @@ app.post('/staff', (req, res) => {
 
 // GET route to fetch all resources
 app.get('/resources', (req, res) => {
+    // SQL: SELECT r.resource_id, r.type, r.amount, r.project_id, p.name as project_name FROM resources r LEFT JOIN projects p ON r.project_id = p.project_id ORDER BY r.resource_id DESC;
     const sql = `
         SELECT r.resource_id, r.type, r.amount, r.project_id,
                p.name as project_name
@@ -172,6 +179,7 @@ app.post('/resources', (req, res) => {
     }
 
 
+    // SQL: INSERT INTO resources (type, project_id, amount) VALUES (?, ?, ?);
     const sql = 'INSERT INTO resources (type, project_id, amount) VALUES (?, ?, ?)';
     const values = [type, project_id || null, amount]; // Handle optional project_id
 
@@ -189,75 +197,14 @@ app.post('/resources', (req, res) => {
 });
 
 
-// --- Invoice Routes ---
-
-// GET route to fetch all invoices (joining with clients)
-app.get('/invoices', (req, res) => {
-    // Join with clients to get client name
-    const sql = `
-        SELECT i.invoice_id, i.issue_date, i.due_date, i.total_amount, i.status,
-               c.name as client_name, c.client_id,
-               p.name as project_name, p.project_id
-        FROM invoices i
-        JOIN clients c ON i.client_id = c.client_id
-        LEFT JOIN projects p ON i.project_id = p.project_id
-        ORDER BY i.issue_date DESC
-    `;
-    db.query(sql, (err, result) => {
-        if (err) {
-            console.error('Error fetching invoices:', err);
-            res.status(500).send('Error retrieving invoices');
-        } else {
-            res.json(result);
-        }
-    });
-});
-
-// POST route to create a new invoice
-app.post('/invoices', (req, res) => {
-    const { client_id, project_id, issue_date, due_date, total_amount, status } = req.body;
-
-    if (!client_id || !issue_date || !due_date || total_amount === undefined || total_amount === null) {
-        return res.status(400).send('Client, issue date, due date, and total amount are required.');
-    }
-    if (isNaN(parseFloat(total_amount)) || !isFinite(total_amount) || total_amount < 0) {
-         return res.status(400).send('Invalid total amount.');
-    }
-
-    const sql = 'INSERT INTO invoices (client_id, project_id, issue_date, due_date, total_amount, status) VALUES (?, ?, ?, ?, ?, ?)';
-    const values = [
-        client_id,
-        project_id || null, // Project can be optional
-        issue_date,
-        due_date,
-        total_amount,
-        status || 'Draft' // Default status
-    ];
-
-    db.query(sql, values, (err, result) => {
-        if (err) {
-            console.error('Error adding invoice:', err);
-             // Check for foreign key constraint error
-            if (err.code === 'ER_NO_REFERENCED_ROW_2') {
-                return res.status(400).send('Invalid client_id or project_id provided.');
-            }
-            res.status(500).send('Error adding invoice');
-        } else {
-            res.status(201).json({ message: 'Invoice added successfully', invoiceId: result.insertId });
-        }
-    });
-});
-
-// --- Payment Routes (Basic Placeholder - GET only for now) ---
-// You would typically add POST for recording payments against invoices
+// --- Payment Routes ---
 app.get('/payments', (req, res) => {
-    // Join with invoices and clients for context
+    // SQL: SELECT pay.payment_id, pay.payment_date, pay.amount_paid, pay.details, p.name as project_name, p.project_id FROM payments pay JOIN projects p ON pay.project_id = p.project_id ORDER BY pay.payment_date DESC;
     const sql = `
-        SELECT pay.payment_id, pay.payment_date, pay.amount, pay.method,
-               i.invoice_id, c.name as client_name
+        SELECT pay.payment_id, pay.payment_date, pay.amount_paid, pay.details,
+               p.name as project_name, p.project_id
         FROM payments pay
-        JOIN invoices i ON pay.invoice_id = i.invoice_id
-        JOIN clients c ON i.client_id = c.client_id
+        JOIN projects p ON pay.project_id = p.project_id
         ORDER BY pay.payment_date DESC
     `;
      db.query(sql, (err, result) => {
@@ -266,6 +213,154 @@ app.get('/payments', (req, res) => {
             res.status(500).send('Error retrieving payments');
         } else {
             res.json(result);
+        }
+    });
+});
+
+// POST route to create a new payment
+app.post('/payments', (req, res) => {
+    const { project_id, payment_date, amount_paid, details } = req.body;
+
+    if (!project_id || !payment_date || amount_paid === undefined || amount_paid === null) {
+        return res.status(400).send('Project, payment date, and amount paid are required.');
+    }
+    if (isNaN(parseFloat(amount_paid)) || !isFinite(amount_paid) || parseFloat(amount_paid) <= 0) {
+        return res.status(400).send('Invalid amount paid. Must be a positive number.');
+    }
+
+    // SQL: INSERT INTO payments (project_id, payment_date, amount_paid, details) VALUES (?, ?, ?, ?);
+    const sql = 'INSERT INTO payments (project_id, payment_date, amount_paid, details) VALUES (?, ?, ?, ?)';
+    const values = [
+        project_id,
+        payment_date,
+        parseFloat(amount_paid),
+        details || null
+    ];
+
+    db.query(sql, values, (err, result) => {
+        if (err) {
+            console.error('Error adding payment:', err);
+            if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+                return res.status(400).send('Invalid project_id provided.');
+            }
+            res.status(500).send('Error adding payment');
+        } else {
+            res.status(201).json({ message: 'Payment recorded successfully', paymentId: result.insertId });
+        }
+    });
+});
+
+// --- Task Routes ---
+
+// GET route to fetch all tasks
+app.get('/tasks', (req, res) => {
+    // SQL: SELECT t.task_id, t.title, t.deadline, t.priority, t.status, t.project_id, p.name as project_name FROM tasks t LEFT JOIN projects p ON t.project_id = p.project_id ORDER BY t.priority ASC, t.deadline ASC, t.task_id DESC;
+    const sql = `
+        SELECT t.task_id, t.title, t.deadline, t.priority, t.status,
+               t.project_id, p.name as project_name
+        FROM tasks t
+        LEFT JOIN projects p ON t.project_id = p.project_id
+        ORDER BY t.priority ASC, t.deadline ASC, t.task_id DESC
+    `;
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.error('Error fetching tasks:', err);
+            res.status(500).send('Error retrieving tasks');
+        } else {
+            res.json(result);
+        }
+    });
+});
+
+// POST route to create a new task
+app.post('/tasks', (req, res) => {
+    const { project_id, title, deadline, priority, status } = req.body;
+
+    if (!title || !project_id) {
+        return res.status(400).send('Task title and project ID are required.');
+    }
+    if (priority && (isNaN(parseInt(priority)) || parseInt(priority) < 0)) {
+        return res.status(400).send('Priority must be a non-negative integer.');
+    }
+    // Optional: Validate status enum if needed
+
+    // SQL: INSERT INTO tasks (project_id, title, deadline, priority, status) VALUES (?, ?, ?, ?, ?);
+    const sql = 'INSERT INTO tasks (project_id, title, deadline, priority, status) VALUES (?, ?, ?, ?, ?)';
+    const values = [
+        project_id,
+        title,
+        deadline || null,
+        priority || null,
+        status || 'Not Started'
+    ];
+
+    db.query(sql, values, (err, result) => {
+        if (err) {
+            console.error('Error adding task:', err);
+            if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+                return res.status(400).send('Invalid project_id provided.');
+            }
+            res.status(500).send('Error adding task');
+        } else {
+            res.status(201).json({ message: 'Task added successfully', taskId: result.insertId });
+        }
+    });
+});
+
+// --- Task Assignment Routes ---
+
+app.get('/task_assignments', (req, res) => {
+    // SQL: SELECT ta.task_id, ta.staff_id, ta.approved, t.title as task_title, s.name as staff_name FROM task_assignments ta JOIN tasks t ON ta.task_id = t.task_id JOIN staff s ON ta.staff_id = s.staff_id ORDER BY t.title ASC, s.name ASC;
+    const sql = `
+        SELECT ta.task_id, ta.staff_id, ta.approved,
+               t.title as task_title,
+               s.name as staff_name
+        FROM task_assignments ta
+        JOIN tasks t ON ta.task_id = t.task_id
+        JOIN staff s ON ta.staff_id = s.staff_id
+        ORDER BY t.title ASC, s.name ASC
+    `;
+    db.query(sql, (err, result) => {
+        if (err) {
+            console.error('Error fetching task assignments:', err);
+            res.status(500).send('Error retrieving task assignments');
+        } else {
+            res.json(result);
+        }
+    });
+});
+
+// POST route to create a new task assignment
+app.post('/task_assignments', (req, res) => {
+    const { task_id, staff_id } = req.body;
+
+    if (!task_id || !staff_id) {
+        return res.status(400).send('Task ID and Staff ID are required for assignment.');
+    }
+
+    // 'approved' field is part of the table, default to 0 (false) or 1 (true) based on your logic.
+    // Since you mentioned manual approval, this might be set to 0 initially,
+    // or 1 if assignment implies a level of approval.
+    // For consistency with previous 'approval' logic where it was set to 1:
+    const approved = 1; // Or 0 if assignment doesn't mean approved yet.
+    // SQL: INSERT INTO task_assignments (task_id, staff_id, approved) VALUES (?, ?, ?);
+    const sql = 'INSERT INTO task_assignments (task_id, staff_id, approved) VALUES (?, ?, ?)';
+    const values = [task_id, staff_id, approved];
+
+    db.query(sql, values, (err, result) => {
+        if (err) {
+            console.error('Error adding task assignment:', err);
+            // Check for foreign key constraint error
+            if (err.code === 'ER_NO_REFERENCED_ROW_2') {
+                return res.status(400).send('Invalid task_id or staff_id provided.');
+            }
+            // Check for duplicate entry if a unique constraint is set on (task_id, staff_id)
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).send('This task has already been assigned to this staff member.');
+            }
+            res.status(500).send('Error adding task assignment');
+        } else {
+            res.status(201).json({ message: 'Task assignment recorded successfully', assignmentId: result.insertId });
         }
     });
 });
